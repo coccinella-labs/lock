@@ -40,6 +40,9 @@ jobs:
 | `days-before-lock` | no | 0 | Days after merge before locking |
 | `lock-reason` | no | `resolved` | Reason for locking (resolved, off-topic, duplicated, spam) |
 | `delete-branch` | no | `true` | Delete the branch after merging |
+| `mode` | no | `single` | `single` locks the event PR; `backfill` sweeps unlocked merged PRs |
+| `include-closed` | no | `true` | In backfill mode, also lock closed-unmerged PRs |
+| `max-prs` | no | `100` | Maximum PRs scanned per backfill run |
 
 ## What it does
 
@@ -47,6 +50,7 @@ jobs:
 - Waits for the configured delay (default 1 day)
 - Locks the PR with the specified reason
 - Optionally deletes the merged branch
+- Backfill mode (`mode: backfill`, usually via manual dispatch) locks any unlocked merged PRs, plus closed-unmerged ones when enabled
 
 ## Notes
 
