@@ -16,6 +16,18 @@ inputs:
     description: "Delete the branch after merging"
     required: false
     default: "true"
+  mode:
+    description: "Lock mode: single (the event PR) or backfill (sweep merged and closed PRs)"
+    required: false
+    default: "single"
+  include-closed:
+    description: "In backfill mode, also lock closed-unmerged PRs"
+    required: false
+    default: "true"
+  max-prs:
+    description: "Maximum PRs to scan per run in backfill mode"
+    required: false
+    default: "100"
 runs:
   using: composite
   steps:
@@ -29,6 +41,7 @@ runs:
         sparse-checkout-cone-mode: false
 
     - name: Lock merged PR
+      if: inputs.mode != 'backfill'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
@@ -40,7 +53,7 @@ runs:
       run: |
         #!/bin/bash
         set -e
-        
+
         DAYS="${DAYS_BEFORE_LOCK:-1}"
         REASON="${LOCK_REASON:-resolved}"
         DELETE_BRANCH="${DELETE_BRANCH:-true}"
@@ -91,3 +104,56 @@ runs:
             echo "Skipping branch deletion (protected or not found)"
           fi
         fi
+
+    - name: Backfill locks
+      if: inputs.mode == 'backfill'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        LOCK_REASON: ${{ inputs.lock-reason }}
+        INCLUDE_CLOSED: ${{ inputs.include-closed }}
+        MAX_PRS: ${{ inputs.max-prs }}
+      run: |
+        #!/bin/bash
+        set -uo pipefail
+
+        REASON="${LOCK_REASON:-resolved}"
+        MAX="${MAX_PRS:-100}"
+        echo "Backfill: locking unlocked merged PRs in $REPO (max $MAX)."
+
+        NUMBERS=$(gh pr list --repo "$REPO" --state merged --limit "$MAX" \
+          --json number --jq '.[].number')
+        COUNT=0
+        for n in $NUMBERS; do
+          LOCKED=$(gh api "repos/$REPO/pulls/$n" --jq .locked 2>/dev/null)
+          if [ "$LOCKED" = "false" ]; then
+            if gh api "repos/$REPO/issues/$n/lock" -X PUT \
+              -f lock_reason="$REASON" --silent 2>/dev/null; then
+              echo "Locked #$n"
+              COUNT=$((COUNT + 1))
+            else
+              echo "Failed #$n"
+            fi
+          fi
+        done
+
+        if [ "$INCLUDE_CLOSED" = "true" ]; then
+          echo "Backfill: locking unlocked closed-unmerged PRs."
+          CLOSED=$(gh pr list --repo "$REPO" --state closed --limit "$MAX" \
+            --json number,mergedAt --jq '.[] | select(.mergedAt == null) | .number')
+          for n in $CLOSED; do
+            LOCKED=$(gh api "repos/$REPO/pulls/$n" --jq .locked 2>/dev/null)
+            if [ "$LOCKED" = "false" ]; then
+              if gh api "repos/$REPO/issues/$n/lock" -X PUT \
+                -f lock_reason="$REASON" --silent 2>/dev/null; then
+                echo "Locked #$n"
+                COUNT=$((COUNT + 1))
+              else
+                echo "Failed #$n"
+              fi
+            fi
+          done
+        fi
+
+        echo "Backfill complete: $COUNT locked."
