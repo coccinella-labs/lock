@@ -4,7 +4,7 @@
 
 # lock
 
-[![Release](https://img.shields.io/github/v/release/libnudget/lock?logo=github&label=latest)](https://github.com/libnudget/lock/releases)
+[![Release](https://img.shields.io/github/v/release/coccinella-labs/lock?logo=github&label=latest)](https://github.com/coccinella-labs/lock/releases)
 
 Reusable GitHub Action for locking merged pull requests after a configurable delay.
 
@@ -27,7 +27,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: libnudget/lock@v1
+      - uses: coccinella-labs/lock@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 ```
